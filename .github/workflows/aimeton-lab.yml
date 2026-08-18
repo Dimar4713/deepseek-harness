@@ -1,0 +1,58 @@
+name: AIMETON LAB
+
+on:
+  push:
+    branches:
+      - 'aimeton/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aimeton-lab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exp-h01a:
+    name: EXP-H01A / Cordis lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DSH_TELEMETRY_DISABLED: '1'
+    steps:
+      - name: Checkout experiment branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Activate pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.7.0 --activate
+          node --version
+          pnpm --version
+
+      - name: Install immutable keyless dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Prove vendored Cordis stayed at intake source
+        run: git diff --exit-code 99f6f02fecdb7dff40c3fbc9470f5907c29f74ca HEAD -- vendor/cordis
+
+      - name: Lint focused experiment
+        run: pnpm exec tsx scripts/run-oxlint.ts scripts/aimeton-exp-h01a.spec.ts
+
+      - name: Verify Agent Note format
+        run: pnpm run verify-agent-note-format
+
+      - name: Verify translation pairing
+        run: pnpm run verify-translation-pairing
+
+      - name: Run focused Cordis lifecycle experiment
+        run: pnpm exec vitest run scripts/aimeton-exp-h01a.spec.ts
